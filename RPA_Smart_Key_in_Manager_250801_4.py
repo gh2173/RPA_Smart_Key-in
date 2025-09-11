@@ -3,7 +3,7 @@ from PyQt5 import QtWidgets, uic, QtGui, QtCore
 from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView, QLabel, QMessageBox, QDialog, QVBoxLayout, QLineEdit, QTextEdit, QDialogButtonBox
 from PyQt5.QtWidgets import QPushButton, QGraphicsDropShadowEffect, QProgressDialog, QComboBox, QHBoxLayout, QWidget
 from PyQt5.QtGui import QColor, QBrush, QPainter, QPixmap
-from PyQt5.QtCore import Qt, QTimer, QRect, QSettings
+from PyQt5.QtCore import Qt, QTimer, QRect
 import cx_Oracle
 from datetime import datetime
 import socket
@@ -17,9 +17,7 @@ from RPA_UI import Ui_TOTAL
 
 # 모듈화된 컴포넌트 import
 from ui.widgets.loading_overlay import LoadingOverlay
-from services.ftp_service import FTPUpdateChecker, FTPUpdateDownloader
 # from services.database_service import DatabaseService
-# from services.update_service import UpdateService
 # from config import DatabaseConfig, FTPConfig
 # from utils import validation_utils, file_utils
 
@@ -120,8 +118,6 @@ class MyWindow(QtWidgets.QMainWindow,Ui_TOTAL):
         self.PUSH_USER_INFO = self.findChild(QtWidgets.QPushButton, "PUSH_USER_INFO")
         self.PUSH_USER_INFO.clicked.connect(self.showUserAndKeyDialog)
         
-        # FTP 업데이트 시스템 초기화
-        self.setup_update_system()
         
         # 현재 필터 상태 저장 변수
         self.current_campus_filter = "전체"
@@ -200,8 +196,6 @@ class MyWindow(QtWidgets.QMainWindow,Ui_TOTAL):
             self.EQP_ID.setFont(font_11px)
             self.STATUS_ID.setFont(font_11px)
         
-        # 프로그램 시작 3초 후 자동 업데이트 확인 (일주일에 한 번)
-        QTimer.singleShot(3000, self.check_auto_update)
     
     def createCampusFilter(self):
         """NS2/NS3 필터 드롭다운을 생성합니다"""
@@ -322,194 +316,6 @@ class MyWindow(QtWidgets.QMainWindow,Ui_TOTAL):
             # 쿼리 재실행
             QTimer.singleShot(100, self.executeQuery)
         
-    def setup_update_system(self):
-        """FTP 업데이트 시스템 초기화"""
-        # FTP 업데이트 체커 초기화
-        self.ftp_checker = FTPUpdateChecker()
-        self.ftp_checker.update_available.connect(self.show_update_dialog)
-        self.ftp_checker.check_completed.connect(self.update_check_finished)
-        
-        # 업데이트 확인 버튼 추가
-        self.add_update_button()
-        
-    def add_update_button(self):
-        """업데이트 확인 버튼을 UI에 추가"""
-        self.UPDATE_BUTTON = QtWidgets.QPushButton("업데이트 확인", self)
-        self.UPDATE_BUTTON.setGeometry(1250, 10, 120, 35)  # 우상단에 배치
-        self.UPDATE_BUTTON.clicked.connect(self.check_for_updates)
-        
-        # 버튼 스타일
-        self.UPDATE_BUTTON.setStyleSheet("""
-            QPushButton {
-                background-color: #2196F3;
-                color: white;
-                border: none;
-                padding: 8px 12px;
-                border-radius: 6px;
-                font-weight: bold;
-                font-size: 10pt;
-            }
-            QPushButton:hover {
-                background-color: #1976D2;
-            }
-            QPushButton:pressed {
-                background-color: #1565C0;
-            }
-            QPushButton:disabled {
-                background-color: #BDBDBD;
-                color: #757575;
-            }
-        """)
-        
-    def check_auto_update(self):
-        """프로그램 시작시 자동 업데이트 확인 (일주일에 한 번)"""
-        settings = QSettings()
-        last_check = settings.value("last_update_check", "")
-        
-        if last_check:
-            try:
-                last_date = datetime.strptime(last_check, "%Y-%m-%d")
-                if (datetime.now() - last_date).days < 7:
-                    return  # 7일이 지나지 않았으면 확인하지 않음
-            except:
-                pass  # 날짜 파싱 실패시 확인 진행
-        
-        # 자동 업데이트 확인 실행
-        self.ftp_checker.start()
-        settings.setValue("last_update_check", datetime.now().strftime("%Y-%m-%d"))
-        
-    def check_for_updates(self):
-        """수동으로 FTP에서 업데이트 확인"""
-        self._manual_check = True
-        self.UPDATE_BUTTON.setText("확인중...")
-        self.UPDATE_BUTTON.setEnabled(False)
-        self.ftp_checker.start()
-        
-    def update_check_finished(self, has_update):
-        """업데이트 확인 완료"""
-        self.UPDATE_BUTTON.setText("업데이트 확인")
-        self.UPDATE_BUTTON.setEnabled(True)
-        
-        if not has_update:
-            # 수동 확인시에만 "최신 버전" 메시지 표시
-            if self.sender() == self.UPDATE_BUTTON or hasattr(self, '_manual_check'):
-                QMessageBox.information(self, "업데이트", "현재 최신 버전을 사용 중입니다.")
-                self._manual_check = False
-    
-    def show_update_dialog(self, latest_version, filename, changelog):
-        """업데이트 다이얼로그 표시"""
-        self.UPDATE_BUTTON.setText("업데이트 확인")
-        self.UPDATE_BUTTON.setEnabled(True)
-        
-        msg = f"""새로운 버전이 있습니다!
-
-현재 버전: {self.ftp_checker.current_version}
-최신 버전: {latest_version}
-
-변경사항:
-{changelog}
-
-지금 업데이트하시겠습니까?
-        """
-        
-        reply = QMessageBox.question(
-            self, 
-            "업데이트 알림",
-            msg,
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.Yes
-        )
-        
-        if reply == QMessageBox.Yes:
-            self.start_ftp_update(filename)
-    
-    def start_ftp_update(self, filename):
-        """FTP 업데이트 시작"""
-        # 진행률 다이얼로그
-        self.progress_dialog = QProgressDialog("FTP에서 업데이트 다운로드 중...", "취소", 0, 100, self)
-        self.progress_dialog.setWindowModality(Qt.WindowModal)
-        self.progress_dialog.setMinimumDuration(0)
-        self.progress_dialog.show()
-        
-        # FTP 다운로더 시작
-        self.ftp_downloader = FTPUpdateDownloader(filename)
-        self.ftp_downloader.progress_updated.connect(self.progress_dialog.setValue)
-        self.ftp_downloader.download_finished.connect(self.install_update)
-        self.ftp_downloader.download_failed.connect(self.download_error)
-        self.ftp_downloader.start()
-        
-        # 취소 버튼 처리
-        self.progress_dialog.canceled.connect(self.cancel_download)
-    
-    def cancel_download(self):
-        """다운로드 취소"""
-        if hasattr(self, 'ftp_downloader'):
-            self.ftp_downloader.terminate()
-            self.ftp_downloader.wait()
-        
-    def download_error(self, error_msg):
-        """다운로드 에러 처리"""
-        if hasattr(self, 'progress_dialog'):
-            self.progress_dialog.close()
-        QMessageBox.critical(self, "다운로드 실패", f"업데이트 다운로드에 실패했습니다:\n\n{error_msg}")
-    
-    def install_update(self, new_exe_path):
-        """업데이트 설치 및 재시작"""
-        if hasattr(self, 'progress_dialog'):
-            self.progress_dialog.close()
-        
-        reply = QMessageBox.question(
-            self, 
-            "업데이트 완료", 
-            "업데이트가 다운로드되었습니다.\n지금 설치하고 프로그램을 재시작하시겠습니까?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.Yes
-        )
-        
-        if reply == QMessageBox.Yes:
-            self.perform_update(new_exe_path)
-    
-    def perform_update(self, new_exe_path):
-        """실제 업데이트 수행"""
-        try:
-            current_exe = sys.executable if getattr(sys, 'frozen', False) else __file__
-            backup_exe = current_exe + ".backup"
-            
-            # 업데이트 배치 스크립트 생성
-            batch_script = f"""@echo off
-echo RPA Smart Key-in Manager 업데이트를 진행합니다...
-timeout /t 3 /nobreak >nul
-
-echo 기존 파일 백업 중...
-if exist "{current_exe}" (
-    if exist "{backup_exe}" del "{backup_exe}"
-    move "{current_exe}" "{backup_exe}"
-)
-
-echo 새 파일로 교체 중...
-move "{new_exe_path}" "{current_exe}"
-
-echo 프로그램을 재시작합니다...
-start "" "{current_exe}"
-
-echo 임시 파일 정리 중...
-timeout /t 3 /nobreak >nul
-del "%~f0"
-"""
-            
-            # 임시 배치 파일 생성
-            batch_path = os.path.join(tempfile.gettempdir(), f"update_rpa_{int(datetime.now().timestamp())}.bat")
-            with open(batch_path, "w", encoding="cp949") as f:
-                f.write(batch_script)
-            
-            # 배치 스크립트 실행 후 현재 프로그램 종료
-            subprocess.Popen([batch_path], shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
-            
-            # 잠시 후 프로그램 종료
-            QTimer.singleShot(1000, self.close)
-            
-        except Exception as e:
-            QMessageBox.critical(self, "업데이트 실패", f"업데이트 중 오류가 발생했습니다:\n\n{str(e)}")
 
     def is_utc_equipment(self, eqp_id):
         """UTC59~UTC73 범위의 장비인지 확인"""
