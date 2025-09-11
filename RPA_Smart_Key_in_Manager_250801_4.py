@@ -1,7 +1,7 @@
 import sys
 from PyQt5 import QtWidgets, uic, QtGui, QtCore
 from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView, QLabel, QMessageBox, QDialog, QVBoxLayout, QLineEdit, QTextEdit, QDialogButtonBox
-from PyQt5.QtWidgets import QPushButton, QGraphicsDropShadowEffect, QProgressDialog
+from PyQt5.QtWidgets import QPushButton, QGraphicsDropShadowEffect, QProgressDialog, QComboBox, QHBoxLayout, QWidget
 from PyQt5.QtGui import QColor, QBrush, QPainter, QPixmap
 from PyQt5.QtCore import Qt, QTimer, QRect, QSettings
 import cx_Oracle
@@ -37,10 +37,13 @@ class MyWindow(QtWidgets.QMainWindow,Ui_TOTAL):
         self.setFixedSize(1400, 900) 
         
         self.tableWidget = QTableWidget(self)
-        self.tableWidget.setGeometry(50, 50, 800, 600)
+        self.tableWidget.setGeometry(50, 100, 800, 550)  # Y좌표를 100으로 이동하여 필터 공간 확보
         self.tableWidget.setColumnCount(5)
         self.tableWidget.setHorizontalHeaderLabels(["EQP_MODEL", "EQP_ID", "EQP_STATUS", "COMMENT", "LOCATION"])
         self.tableWidget.hide()
+        
+        # NS2/NS3 필터 드롭다운 생성
+        self.createCampusFilter()
         
         self.loading_overlay = LoadingOverlay(self)
         self.loading_overlay.hide()
@@ -120,6 +123,9 @@ class MyWindow(QtWidgets.QMainWindow,Ui_TOTAL):
         # FTP 업데이트 시스템 초기화
         self.setup_update_system()
         
+        # 현재 필터 상태 저장 변수
+        self.current_campus_filter = "전체"
+        
         if self.grid_layout_2_widget:
             self.grid_layout_2_widget.hide()
         
@@ -178,6 +184,100 @@ class MyWindow(QtWidgets.QMainWindow,Ui_TOTAL):
         
         # 프로그램 시작 3초 후 자동 업데이트 확인 (일주일에 한 번)
         QTimer.singleShot(3000, self.check_auto_update)
+    
+    def createCampusFilter(self):
+        """NS2/NS3 필터 드롭다운을 생성합니다"""
+        # 필터 위젯 컨테이너 생성
+        self.filter_widget = QWidget(self)
+        self.filter_widget.setGeometry(50, 50, 800, 40)  # 테이블 위쪽에 배치
+        self.filter_widget.hide()
+        
+        # 수평 레이아웃 생성
+        filter_layout = QHBoxLayout(self.filter_widget)
+        filter_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # 라벨 생성
+        filter_label = QLabel("📍 Campus Filter:")
+        filter_label.setStyleSheet("""
+            QLabel {
+                font-size: 14px;
+                font-weight: bold;
+                color: #2c3e50;
+                padding: 5px;
+            }
+        """)
+        
+        # 드롭다운 콤보박스 생성
+        self.campus_filter = QComboBox()
+        self.campus_filter.addItems(["전체", "NS2", "NS3"])
+        self.campus_filter.setCurrentText("전체")
+        
+        # 눈에 확실히 띄는 스타일 적용
+        self.campus_filter.setStyleSheet("""
+            QComboBox {
+                background-color: #3498db;
+                color: white;
+                font-size: 14px;
+                font-weight: bold;
+                padding: 8px 15px;
+                border: 3px solid #2980b9;
+                border-radius: 8px;
+                min-width: 120px;
+            }
+            QComboBox:hover {
+                background-color: #2980b9;
+                border: 3px solid #1f618d;
+            }
+            QComboBox::drop-down {
+                subcontrol-origin: padding;
+                subcontrol-position: top right;
+                width: 25px;
+                border-left: 2px solid #2980b9;
+                background-color: #2980b9;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border: 2px solid white;
+                width: 0px;
+                height: 0px;
+                border-top: 6px solid white;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                margin: 4px;
+            }
+            QComboBox QAbstractItemView {
+                background-color: white;
+                color: #2c3e50;
+                selection-background-color: #3498db;
+                selection-color: white;
+                border: 2px solid #3498db;
+                font-size: 14px;
+                font-weight: bold;
+            }
+        """)
+        
+        # 필터 변경 시 이벤트 연결
+        self.campus_filter.currentTextChanged.connect(self.onCampusFilterChanged)
+        
+        # 레이아웃에 위젯 추가
+        filter_layout.addWidget(filter_label)
+        filter_layout.addWidget(self.campus_filter)
+        filter_layout.addStretch()  # 나머지 공간 채우기
+        
+        self.filter_widget.setLayout(filter_layout)
+    
+    def onCampusFilterChanged(self, filter_value):
+        """Campus 필터 변경 시 호출되는 이벤트 핸들러"""
+        self.current_campus_filter = filter_value
+        print(f"Campus 필터 변경: {filter_value}")
+        
+        # 현재 표시된 테이블이 있으면 필터 재적용
+        if hasattr(self, 'current_action') and self.tableWidget.isVisible():
+            # 로딩 표시
+            self.loading_overlay.setGeometry(self.rect())
+            self.loading_overlay.show()
+            # 쿼리 재실행
+            QTimer.singleShot(100, self.executeQuery)
         
     def setup_update_system(self):
         """FTP 업데이트 시스템 초기화"""
@@ -526,6 +626,10 @@ del "%~f0"
         self.STATUS_ID.setText(action_type)  # Monitor 탭의 STATUS_ID에 텍스트 설정
         self.loading_overlay.setGeometry(self.rect())
         self.loading_overlay.show()
+        
+        # 필터 위젯 표시
+        self.filter_widget.show()
+        
         QTimer.singleShot(100, self.executeQuery)
         self.closeTableButton.show()
     
@@ -626,8 +730,13 @@ del "%~f0"
                 WHERE x.CAMPUS IS NOT NULL
                 AND x.PLANT IN 'CCUBEDIGITAL'
                 AND x.MAIN_STATUS NOT IN ('RUN', 'SHUTDOWN')
- 
             """
+        
+        # Campus 필터 적용
+        if hasattr(self, 'current_campus_filter') and self.current_campus_filter != "전체":
+            query += f" AND x.CAMPUS = '{self.current_campus_filter}'"
+        
+        query += " ORDER BY x.EQUIPMENT_ID"
         
     
         cursor.execute(query)
@@ -676,7 +785,12 @@ del "%~f0"
         self.tableWidget.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.loading_overlay.hide()
         self.tableWidget.show()
-        self.tableWidget.setGeometry(50, 50, self.width() - 100, self.height() - 150)
+        # 필터 공간을 고려하여 테이블 위치 조정
+        self.tableWidget.setGeometry(50, 100, self.width() - 100, self.height() - 200)
+        
+        # 필터 위젯 크기 조정
+        if hasattr(self, 'filter_widget'):
+            self.filter_widget.setGeometry(50, 50, self.width() - 100, 40)
     
         # Close 버튼 위치 설정 및 표시
         self.closeTableButton.setGeometry(self.width() - 150, self.height() - 80, 100, 30)
@@ -688,6 +802,9 @@ del "%~f0"
     def closeTable(self):
         self.tableWidget.hide()
         self.closeTableButton.hide()
+        # 필터 위젯도 숨기기
+        if hasattr(self, 'filter_widget'):
+            self.filter_widget.hide()
     
     def onItemDoubleClicked(self, item):
         row = item.row()
@@ -1417,7 +1534,10 @@ del "%~f0"
         super().resizeEvent(event)
         self.loading_overlay.setGeometry(self.rect())
         if self.tableWidget.isVisible():
-            self.tableWidget.setGeometry(50, 50, self.width() - 100, self.height() - 150)
+            self.tableWidget.setGeometry(50, 100, self.width() - 100, self.height() - 200)
+            # 필터 위젯 크기 조정
+            if hasattr(self, 'filter_widget'):
+                self.filter_widget.setGeometry(50, 50, self.width() - 100, 40)
             self.closeTableButton.setGeometry(self.width() - 150, self.height() - 80, 100, 30)
             self.closeTableButton.show()
         else:
