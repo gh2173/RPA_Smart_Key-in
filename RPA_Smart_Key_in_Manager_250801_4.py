@@ -37,7 +37,7 @@ class MyWindow(QtWidgets.QMainWindow,Ui_TOTAL):
         self.setFixedSize(1400, 900) 
         
         self.tableWidget = QTableWidget(self)
-        self.tableWidget.setGeometry(50, 100, 800, 550)  # Y좌표를 100으로 이동하여 필터 공간 확보
+        self.tableWidget.setGeometry(50, 90, 800, 560)  # 필터와 바로 연결되도록 Y좌표 조정
         self.tableWidget.setColumnCount(5)
         self.tableWidget.setHorizontalHeaderLabels(["EQP_MODEL", "EQP_ID", "EQP_STATUS", "COMMENT", "LOCATION"])
         self.tableWidget.hide()
@@ -131,15 +131,33 @@ class MyWindow(QtWidgets.QMainWindow,Ui_TOTAL):
         
         self.tableWidget.setStyleSheet("""
             QTableWidget {
-                background-color: #f0f0f0;
-                alternate-background-color: #e0e0e0;
-                selection-background-color: #a0a0a0;
+                background-color: #ffffff;
+                alternate-background-color: #f8f8f8;
+                selection-background-color: #0078d4;
+                selection-color: white;
+                gridline-color: #d0d0d0;
+                border: 1px solid #a0a0a0;
+                border-top: none;
+                border-bottom-left-radius: 5px;
+                border-bottom-right-radius: 5px;
+                border-top-left-radius: 0px;
+                border-top-right-radius: 0px;
             }
             QHeaderView::section {
-                background-color: #d0d0d0;
-                padding: 4px;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #f8f8f8, stop:0.1 #f0f0f0, 
+                    stop:0.9 #e8e8e8, stop:1.0 #e0e0e0);
+                padding: 6px;
                 border: 1px solid #c0c0c0;
+                border-top: none;
                 font-weight: bold;
+                color: #333333;
+            }
+            QHeaderView::section:first {
+                border-left: none;
+            }
+            QHeaderView::section:last {
+                border-right: none;
             }
         """)
         self.tableWidget.setAlternatingRowColors(True)
@@ -192,14 +210,18 @@ class MyWindow(QtWidgets.QMainWindow,Ui_TOTAL):
         self.filter_widget.setGeometry(50, 50, 800, 40)  # 테이블 위쪽에 배치
         self.filter_widget.hide()
         
-        # Windows 헤더 스타일 배경 적용
+        # Windows 헤더 스타일 배경 적용 (테이블과 일체형)
         self.filter_widget.setStyleSheet("""
             QWidget {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                     stop:0 #f0f0f0, stop:0.1 #e8e8e8, 
                     stop:0.9 #d0d0d0, stop:1.0 #c8c8c8);
-                border: 2px solid #a0a0a0;
-                border-radius: 5px;
+                border: 1px solid #a0a0a0;
+                border-bottom: none;
+                border-top-left-radius: 5px;
+                border-top-right-radius: 5px;
+                border-bottom-left-radius: 0px;
+                border-bottom-right-radius: 0px;
             }
         """)
         
@@ -678,18 +700,39 @@ del "%~f0"
         return -1
 
     def createButton(self):
-        self.closeTableButton = QPushButton("Close Table", self)
+        self.closeTableButton = QPushButton("✕ Close Table", self)
         self.closeTableButton.clicked.connect(self.closeTable)
         
-        # 그림자 효과 생성
-        shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(15)
-        shadow.setXOffset(3)
-        shadow.setYOffset(3)
-        shadow.setColor(QColor(0, 0, 0, 60))
-        
-        # 버튼에 그림자 효과 적용
-        self.closeTableButton.setGraphicsEffect(shadow)
+        # 테이블과 일체감 있는 스타일 적용
+        self.closeTableButton.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #f8f8f8, stop:0.1 #f0f0f0, 
+                    stop:0.9 #e8e8e8, stop:1.0 #e0e0e0);
+                color: #333333;
+                font-size: 12px;
+                font-weight: bold;
+                padding: 8px 16px;
+                border: 1px solid #a0a0a0;
+                border-top: none;
+                border-bottom-left-radius: 0px;
+                border-bottom-right-radius: 5px;
+                border-top-left-radius: 0px;
+                border-top-right-radius: 0px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #ff6b6b, stop:0.1 #ff5252, 
+                    stop:0.9 #e53935, stop:1.0 #d32f2f);
+                color: white;
+                border: 1px solid #c62828;
+            }
+            QPushButton:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #d32f2f, stop:1.0 #b71c1c);
+                color: white;
+            }
+        """)
         
         
     def executeQuery(self):
@@ -806,15 +849,17 @@ del "%~f0"
         self.tableWidget.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.loading_overlay.hide()
         self.tableWidget.show()
-        # 필터 공간을 고려하여 테이블 위치 조정
-        self.tableWidget.setGeometry(50, 100, self.width() - 100, self.height() - 200)
+        # 필터와 연결되도록 테이블 위치 조정
+        self.tableWidget.setGeometry(50, 90, self.width() - 100, self.height() - 190)
         
         # 필터 위젯 크기 조정
         if hasattr(self, 'filter_widget'):
             self.filter_widget.setGeometry(50, 50, self.width() - 100, 40)
     
-        # Close 버튼 위치 설정 및 표시
-        self.closeTableButton.setGeometry(self.width() - 150, self.height() - 80, 100, 30)
+        # Close 버튼을 테이블 오른쪽 하단에 붙여서 일체감 연출
+        table_right = 50 + (self.width() - 100)  # 테이블 오른쪽 끝
+        table_bottom = 90 + (self.height() - 190)  # 테이블 아래쪽 끝
+        self.closeTableButton.setGeometry(table_right - 120, table_bottom - 1, 120, 30)
         self.closeTableButton.show()
     
         cursor.close()
@@ -1555,11 +1600,14 @@ del "%~f0"
         super().resizeEvent(event)
         self.loading_overlay.setGeometry(self.rect())
         if self.tableWidget.isVisible():
-            self.tableWidget.setGeometry(50, 100, self.width() - 100, self.height() - 200)
+            self.tableWidget.setGeometry(50, 90, self.width() - 100, self.height() - 190)
             # 필터 위젯 크기 조정
             if hasattr(self, 'filter_widget'):
                 self.filter_widget.setGeometry(50, 50, self.width() - 100, 40)
-            self.closeTableButton.setGeometry(self.width() - 150, self.height() - 80, 100, 30)
+            # Close 버튼을 테이블 오른쪽 하단에 붙여서 일체감 연출
+            table_right = 50 + (self.width() - 100)  # 테이블 오른쪽 끝
+            table_bottom = 90 + (self.height() - 190)  # 테이블 아래쪽 끝
+            self.closeTableButton.setGeometry(table_right - 120, table_bottom - 1, 120, 30)
             self.closeTableButton.show()
         else:
             self.closeTableButton.hide()
