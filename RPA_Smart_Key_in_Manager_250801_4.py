@@ -192,9 +192,20 @@ class MyWindow(QtWidgets.QMainWindow,Ui_TOTAL):
         self.filter_widget.setGeometry(50, 50, 800, 40)  # 테이블 위쪽에 배치
         self.filter_widget.hide()
         
+        # Windows 헤더 스타일 배경 적용
+        self.filter_widget.setStyleSheet("""
+            QWidget {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #f0f0f0, stop:0.1 #e8e8e8, 
+                    stop:0.9 #d0d0d0, stop:1.0 #c8c8c8);
+                border: 2px solid #a0a0a0;
+                border-radius: 5px;
+            }
+        """)
+        
         # 수평 레이아웃 생성
         filter_layout = QHBoxLayout(self.filter_widget)
-        filter_layout.setContentsMargins(0, 0, 0, 0)
+        filter_layout.setContentsMargins(10, 8, 10, 8)  # 여백 추가
         
         # 라벨 생성
         filter_label = QLabel("📍 Campus Filter:")
@@ -202,8 +213,10 @@ class MyWindow(QtWidgets.QMainWindow,Ui_TOTAL):
             QLabel {
                 font-size: 14px;
                 font-weight: bold;
-                color: #2c3e50;
-                padding: 5px;
+                color: #333333;
+                background: transparent;
+                border: none;
+                padding: 2px 8px;
             }
         """)
         
@@ -212,47 +225,55 @@ class MyWindow(QtWidgets.QMainWindow,Ui_TOTAL):
         self.campus_filter.addItems(["전체", "NS2", "NS3"])
         self.campus_filter.setCurrentText("전체")
         
-        # 눈에 확실히 띄는 스타일 적용
+        # Windows 스타일 콤보박스 적용
         self.campus_filter.setStyleSheet("""
             QComboBox {
-                background-color: #3498db;
-                color: white;
-                font-size: 14px;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #ffffff, stop:0.1 #f8f8f8, 
+                    stop:0.9 #e0e0e0, stop:1.0 #d8d8d8);
+                color: #333333;
+                font-size: 13px;
                 font-weight: bold;
-                padding: 8px 15px;
-                border: 3px solid #2980b9;
-                border-radius: 8px;
-                min-width: 120px;
+                padding: 6px 12px;
+                border: 1px solid #999999;
+                border-radius: 3px;
+                min-width: 100px;
             }
             QComboBox:hover {
-                background-color: #2980b9;
-                border: 3px solid #1f618d;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #f0f8ff, stop:0.1 #e8f4ff, 
+                    stop:0.9 #d0e8ff, stop:1.0 #c8e0ff);
+                border: 1px solid #0078d4;
+            }
+            QComboBox:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #e0e8f0, stop:1.0 #c0d0e0);
             }
             QComboBox::drop-down {
                 subcontrol-origin: padding;
                 subcontrol-position: top right;
-                width: 25px;
-                border-left: 2px solid #2980b9;
-                background-color: #2980b9;
+                width: 20px;
+                border-left: 1px solid #999999;
+                background: transparent;
             }
             QComboBox::down-arrow {
                 image: none;
-                border: 2px solid white;
+                border: 1px solid #666666;
                 width: 0px;
                 height: 0px;
-                border-top: 6px solid white;
-                border-left: 4px solid transparent;
-                border-right: 4px solid transparent;
-                margin: 4px;
+                border-top: 5px solid #666666;
+                border-left: 3px solid transparent;
+                border-right: 3px solid transparent;
+                margin: 3px;
             }
             QComboBox QAbstractItemView {
                 background-color: white;
-                color: #2c3e50;
-                selection-background-color: #3498db;
+                color: #333333;
+                selection-background-color: #0078d4;
                 selection-color: white;
-                border: 2px solid #3498db;
-                font-size: 14px;
-                font-weight: bold;
+                border: 1px solid #999999;
+                font-size: 13px;
+                outline: 0;
             }
         """)
         
