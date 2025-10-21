@@ -926,7 +926,7 @@ class MyWindow(QtWidgets.QMainWindow,Ui_TOTAL):
                     FROM SIMAXE.MC_LOT
                     WHERE
                         LOT_ID = :lot_id
-                    AND (STEP_SEQ LIKE 'A0%')
+                    AND (STEP_SEQ LIKE 'A0%' OR STEP_SEQ LIKE 'Y0%')
                     AND LOT_STATUS_SEG IN ('Active', 'Hold')
                 )
                 WHERE rn = 1
@@ -945,7 +945,8 @@ class MyWindow(QtWidgets.QMainWindow,Ui_TOTAL):
                     return False
 
                 # 'STEP_SEQ' 컬럼값이 지정된 조건이 아닐 때 인터락 추가
-                valid_steps = ['A02450', 'A02500', 'A02650', 'A02750', 'A02450TR01', 'A02500TR01', 'A02650TR01', 'A02750TR01']            
+                valid_steps = ['A02450', 'A02500', 'A02650', 'A02750', 'A02450TR01', 'A02500TR01', 'A02650TR01', 'A02750TR01'
+                                , 'Y06000', 'Y06320', 'Y06420', 'Y06475', 'Y06000TR01', 'Y06320TR01', 'Y06420TR01', 'Y06475TR01']            
                 if not any(row[1] in valid_steps for row in results):
                     QMessageBox.warning(self, "경고", "해당 LOT_ID가 존재하지 않거나 지정된 STEP에서 찾을 수 없습니다.")
                     cursor.close()
@@ -1179,13 +1180,13 @@ class MyWindow(QtWidgets.QMainWindow,Ui_TOTAL):
             cursor = connection.cursor()
 
             query = """
-            SELECT 
+            SELECT
                 A.PC_ID AS PIB_ID,
                 A.EQP_GROUP AS 설비,
                 A.PARA
-            FROM EDS_DB.PMS_MAIN_PB A
-            WHERE SUBSTR(A.PROD, 1, 7) = :product_prefix
-            AND REGEXP_LIKE(A.PC_ID, '-[0-9]{3}$')
+            FROM EDS_DB.PMS_MAIN A
+                WHERE SUBSTR(A.OWNER_PC_ID, 2, 7) = :product_prefix
+                
             """
 
             cursor.execute(query, {'product_prefix': product_prefix})
@@ -1204,10 +1205,114 @@ class MyWindow(QtWidgets.QMainWindow,Ui_TOTAL):
             connection.close()
 
             if not results:
-                # 결과가 없을 경우 빈 테이블 표시
-                empty_model = QtGui.QStandardItemModel()
-                empty_model.setHorizontalHeaderLabels(["PIB_ID", "설비", "PARA"])
-                self.PIB_TABLE.setModel(empty_model)
+                # 결과가 없을 경우 수동 입력 팝업창 표시
+                dialog = QDialog(self)
+                dialog.setWindowTitle("PIB 수동 입력")
+                dialog.resize(400, 250)
+                layout = QVBoxLayout()
+
+                # 스타일 시트 설정
+                dialog.setStyleSheet("""
+                    QDialog {
+                        background-color: #f0f0f0;
+                        border: 1px solid #c0c0c0;
+                        border-radius: 10px;
+                    }
+                    QLabel {
+                        font-size: 14pt;
+                        font-weight: bold;
+                        color: #333333;
+                    }
+                    QLineEdit {
+                        font-size: 12pt;
+                        padding: 5px;
+                        border: 1px solid #c0c0c0;
+                        border-radius: 5px;
+                    }
+                    QDialogButtonBox {
+                        font-size: 12pt;
+                    }
+                    QPushButton {
+                        background-color: #4CAF50;
+                        color: white;
+                        border: none;
+                        padding: 10px 20px;
+                        text-align: center;
+                        text-decoration: none;
+                        display: inline-block;
+                        font-size: 12pt;
+                        margin: 4px 2px;
+                        border-radius: 5px;
+                    }
+                    QPushButton:hover {
+                        background-color: #45a049;
+                    }
+                    QPushButton:pressed {
+                        background-color: #3e8e41;
+                    }
+                """)
+
+                # 안내 메시지
+                message_label = QLabel("PIB 관련 쿼리에서 테이블 값이 없으면\nPIB를 수동으로 입력해주시기 바랍니다")
+                layout.addWidget(message_label)
+
+                # 입력 필드와 버튼 추가
+                pib_id_label = QLabel("PIB_ID:")
+                pib_id_input = QLineEdit()
+                layout.addWidget(pib_id_label)
+                layout.addWidget(pib_id_input)
+
+                equipment_label = QLabel("설비:")
+                equipment_input = QLineEdit()
+                layout.addWidget(equipment_label)
+                layout.addWidget(equipment_input)
+
+                para_label = QLabel("PARA:")
+                para_input = QLineEdit()
+                layout.addWidget(para_label)
+                layout.addWidget(para_input)
+
+                button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+                button_box.accepted.connect(dialog.accept)
+                button_box.rejected.connect(dialog.reject)
+                layout.addWidget(button_box)
+
+                dialog.setLayout(layout)
+
+                # 팝업창 실행
+                if dialog.exec_() == QDialog.Accepted:
+                    pib_id = pib_id_input.text()
+                    equipment = equipment_input.text()
+                    para = para_input.text()
+
+                    if not pib_id or not equipment or not para:
+                        QMessageBox.warning(self, "경고", "모든 필드를 입력해주세요.")
+                        empty_model = QtGui.QStandardItemModel()
+                        empty_model.setHorizontalHeaderLabels(["PIB_ID", "설비", "PARA"])
+                        self.PIB_TABLE.setModel(empty_model)
+                        return
+
+                    # PIB_ID 형식 검증: "-숫자3자리"로 끝나야 함
+                    import re
+                    if not re.match(r'.*-\d{3}$', pib_id):
+                        QMessageBox.warning(self, "경고", "PIB_ID는 '-숫자3자리' 형식으로 끝나야 합니다.\n예: ABC-123")
+                        empty_model = QtGui.QStandardItemModel()
+                        empty_model.setHorizontalHeaderLabels(["PIB_ID", "설비", "PARA"])
+                        self.PIB_TABLE.setModel(empty_model)
+                        return
+
+                    # 수동 입력된 데이터를 PIB_TABLE에 표시
+                    manual_model = QtGui.QStandardItemModel()
+                    manual_model.setHorizontalHeaderLabels(["PIB_ID", "설비", "PARA"])
+                    items = [QtGui.QStandardItem(pib_id), QtGui.QStandardItem(equipment), QtGui.QStandardItem(para)]
+                    manual_model.appendRow(items)
+                    self.PIB_TABLE.setModel(manual_model)
+                    self.PIB_TABLE.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
+                else:
+                    # 취소된 경우 빈 테이블 표시
+                    empty_model = QtGui.QStandardItemModel()
+                    empty_model.setHorizontalHeaderLabels(["PIB_ID", "설비", "PARA"])
+                    self.PIB_TABLE.setModel(empty_model)
         except Exception as e:
             # 예외가 발생하면 에러 메시지를 표시하고 프로그램이 종료되지 않도록 합니다.
             QMessageBox.critical(self, "에러", f"예외가 발생했습니다: {str(e)}")
