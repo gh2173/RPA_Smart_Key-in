@@ -491,6 +491,9 @@ class MyWindow(QtWidgets.QMainWindow,Ui_TOTAL):
         else:
             self.tableWidget.hide()
             self.closeTableButton.hide()
+            # 필터 위젯도 숨기기
+            if hasattr(self, 'filter_widget'):
+                self.filter_widget.hide()
             
     def onCloseButton1Clicked(self):
         main_tab_index = self.findMainTabIndex()
@@ -686,7 +689,10 @@ class MyWindow(QtWidgets.QMainWindow,Ui_TOTAL):
         self.EQP_ID.setText(eqp_id)
         self.tableWidget.hide()
         self.closeTableButton.hide()
-        
+        # 필터 위젯도 숨기기
+        if hasattr(self, 'filter_widget'):
+            self.filter_widget.hide()
+
         # MAIN_STATUS가 'OM'을 포함하는 경우 특별한 처리
         if 'OM' in main_status:
             self.showUserInfoPopup(eqp_id, main_status)
@@ -1140,15 +1146,19 @@ class MyWindow(QtWidgets.QMainWindow,Ui_TOTAL):
 
                 if not filtered_results:
                     QMessageBox.information(self, "정보", "입력된 Probe Card ID와 일치하는 데이터가 없습니다.")
-                    
+
                     # 빈 모델을 설정하여 테이블을 비웁니다.
                     empty_model = QtGui.QStandardItemModel()
                     empty_model.setHorizontalHeaderLabels(["PC_ID", "PC_GROUP", "설비", "위치", "TOTAL_SHOT"])
                     self.PC_TABLE.setModel(empty_model)
-                    
+
                     # Main_tab으로 이동
                     QTimer.singleShot(0, self.switchToMainTab)  # QTimer를 사용하여 Main_tab으로 이동
                     return False
+
+                # PC_TABLE에 데이터가 있으면 첫 번째 행을 자동으로 선택
+                self.selected_pc = 0
+                print(f"[DEBUG] PC_TABLE 첫 번째 행 자동 선택: self.selected_pc = {self.selected_pc}")
 
                 return True
             else:
@@ -1192,20 +1202,73 @@ class MyWindow(QtWidgets.QMainWindow,Ui_TOTAL):
             cursor.execute(query, {'product_prefix': product_prefix})
             results = cursor.fetchall()
 
-            pib_model = QtGui.QStandardItemModel()
-            pib_model.setHorizontalHeaderLabels(["PIB_ID", "설비", "PARA"])
-            for row in results:
-                items = [QtGui.QStandardItem(str(value)) for value in row]
-                pib_model.appendRow(items)
-
-            self.PIB_TABLE.setModel(pib_model)
-            self.PIB_TABLE.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
-
             cursor.close()
             connection.close()
 
+            # 결과가 있으면 바로 표시
+            if results:
+                pib_model = QtGui.QStandardItemModel()
+                pib_model.setHorizontalHeaderLabels(["PIB_ID", "설비", "PARA"])
+                for row in results:
+                    items = [QtGui.QStandardItem(str(value)) for value in row]
+                    pib_model.appendRow(items)
+
+                self.PIB_TABLE.setModel(pib_model)
+                self.PIB_TABLE.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
+                return
+
+            # 결과가 없으면 2단계 조회 시작
             if not results:
-                # 결과가 없을 경우 수동 입력 팝업창 표시
+                # 결과가 없을 경우 PC_TABLE의 설비 값으로 재조회
+                pc_model = self.PC_TABLE.model()
+                if pc_model is None or self.selected_pc is None:
+                    QtWidgets.QMessageBox.warning(self, "경고", "PC_TABLE에서 항목을 선택해주세요.")
+                    return
+
+                # PC_TABLE에서 선택된 행의 '설비' 값 가져오기 (인덱스 2)
+                pc_equipment = pc_model.data(pc_model.index(self.selected_pc, 2))
+                print(f"[DEBUG] PC_TABLE의 설비 값: {pc_equipment}")
+
+                # 새로운 연결 및 쿼리 실행
+                connection = cx_Oracle.connect(user='Ark_select_user', password='ark12$select', dsn=dsn_tns)
+                cursor = connection.cursor()
+
+                # P%로 시작하는 모든 PIB 조회
+                backup_query = """
+                SELECT
+                    A.PC_ID AS PIB_ID,
+                    A.EQP_GROUP AS 설비,
+                    A.PARA
+                FROM EDS_DB.PMS_MAIN A
+                WHERE A.PC_ID LIKE 'P%'
+                """
+
+                cursor.execute(backup_query)
+                backup_results = cursor.fetchall()
+                print(f"[DEBUG] P% 쿼리 결과 개수: {len(backup_results)}")
+
+                cursor.close()
+                connection.close()
+
+                # 설비 값이 일치하는 것만 필터링
+                filtered_results = [row for row in backup_results if str(row[1]) == str(pc_equipment)]
+                print(f"[DEBUG] 필터링된 결과 개수: {len(filtered_results)}")
+                if filtered_results:
+                    print(f"[DEBUG] 필터링된 첫 번째 결과: {filtered_results[0]}")
+
+                if filtered_results:
+                    # 필터링된 결과를 PIB_TABLE에 표시
+                    pib_model = QtGui.QStandardItemModel()
+                    pib_model.setHorizontalHeaderLabels(["PIB_ID", "설비", "PARA"])
+                    for row in filtered_results:
+                        items = [QtGui.QStandardItem(str(value)) for value in row]
+                        pib_model.appendRow(items)
+
+                    self.PIB_TABLE.setModel(pib_model)
+                    self.PIB_TABLE.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
+                    return
+
+                # 필터링 결과도 없으면 수동 입력 팝업창 표시
                 dialog = QDialog(self)
                 dialog.setWindowTitle("PIB 수동 입력")
                 dialog.resize(400, 250)
@@ -1262,16 +1325,6 @@ class MyWindow(QtWidgets.QMainWindow,Ui_TOTAL):
                 layout.addWidget(pib_id_label)
                 layout.addWidget(pib_id_input)
 
-                equipment_label = QLabel("설비:")
-                equipment_input = QLineEdit()
-                layout.addWidget(equipment_label)
-                layout.addWidget(equipment_input)
-
-                para_label = QLabel("PARA:")
-                para_input = QLineEdit()
-                layout.addWidget(para_label)
-                layout.addWidget(para_input)
-
                 button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
                 button_box.accepted.connect(dialog.accept)
                 button_box.rejected.connect(dialog.reject)
@@ -1282,11 +1335,9 @@ class MyWindow(QtWidgets.QMainWindow,Ui_TOTAL):
                 # 팝업창 실행
                 if dialog.exec_() == QDialog.Accepted:
                     pib_id = pib_id_input.text()
-                    equipment = equipment_input.text()
-                    para = para_input.text()
 
-                    if not pib_id or not equipment or not para:
-                        QMessageBox.warning(self, "경고", "모든 필드를 입력해주세요.")
+                    if not pib_id:
+                        QMessageBox.warning(self, "경고", "PIB_ID를 입력해주세요.")
                         empty_model = QtGui.QStandardItemModel()
                         empty_model.setHorizontalHeaderLabels(["PIB_ID", "설비", "PARA"])
                         self.PIB_TABLE.setModel(empty_model)
@@ -1301,10 +1352,10 @@ class MyWindow(QtWidgets.QMainWindow,Ui_TOTAL):
                         self.PIB_TABLE.setModel(empty_model)
                         return
 
-                    # 수동 입력된 데이터를 PIB_TABLE에 표시
+                    # 수동 입력된 데이터를 PIB_TABLE에 표시 (설비, PARA는 빈 값)
                     manual_model = QtGui.QStandardItemModel()
                     manual_model.setHorizontalHeaderLabels(["PIB_ID", "설비", "PARA"])
-                    items = [QtGui.QStandardItem(pib_id), QtGui.QStandardItem(equipment), QtGui.QStandardItem(para)]
+                    items = [QtGui.QStandardItem(pib_id), QtGui.QStandardItem(""), QtGui.QStandardItem("")]
                     manual_model.appendRow(items)
                     self.PIB_TABLE.setModel(manual_model)
                     self.PIB_TABLE.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
@@ -1506,6 +1557,9 @@ class MyWindow(QtWidgets.QMainWindow,Ui_TOTAL):
         if self.grid_layout_2_widget:
             self.grid_layout_2_widget.hide()
         self.tableWidget.hide()
+        # 필터 위젯도 숨기기
+        if hasattr(self, 'filter_widget'):
+            self.filter_widget.hide()
     
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -1777,4 +1831,3 @@ if __name__ == "__main__":
     window = MyWindow()
     window.show()   
     sys.exit(app.exec_())
-
